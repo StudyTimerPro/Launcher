@@ -1,0 +1,106 @@
+name: Build OneSignal Test APK
+
+on: 
+  workflow_dispatch:
+    inputs:
+      onesignal_app_id:
+        description: 'OneSignal App ID (leave empty to use default)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.0"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flet>=0.28.3 flet-onesignal>=0.3.3
+
+      - name: Update OneSignal App ID in test file (if provided)
+        if: ${{ github.event.inputs.onesignal_app_id != '' }}
+        run: |
+          sed -i 's/ONESIGNAL_APP_ID = ".*"/ONESIGNAL_APP_ID = "${{ github.event.inputs.onesignal_app_id }}"/' test_onesignal.py
+          echo "✅ Updated App ID to: ${{ github.event.inputs.onesignal_app_id }}"
+
+      - name: Copy test pyproject.toml
+        run: |
+          cp pyproject_test.toml pyproject.toml
+          echo "✅ Using test pyproject.toml"
+
+      - name: Show configuration
+        run: |
+          echo "=== Configuration ==="
+          echo "Module: test_onesignal"
+          echo "Package: com.flet.onesignal_test"
+          cat pyproject.toml
+          echo "===================="
+          
+          echo "=== OneSignal App ID ==="
+          grep "ONESIGNAL_APP_ID" test_onesignal.py || echo "Not found"
+          echo "========================"
+
+      - name: Build APK with Flet
+        run: |
+          echo "🔨 Building OneSignal Test APK..."
+          flet build apk --verbose --module test_onesignal
+
+      - name: Find and rename APK
+        run: |
+          APK_PATH=$(find . -name "*.apk" | head -n 1)
+          echo "Found APK at: $APK_PATH"
+          
+          if [ -f "$APK_PATH" ]; then
+            cp "$APK_PATH" OneSignalTest.apk
+            echo "✅ APK copied to OneSignalTest.apk"
+            
+            # Show APK info
+            ls -lh OneSignalTest.apk
+          else
+            echo "❌ No APK found!"
+            exit 1
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OneSignalTest-APK
+          path: OneSignalTest.apk
+          retention-days: 7
+
+      - name: Build Summary
+        run: |
+          echo "## ✅ Build Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Artifact Info" >> $GITHUB_STEP_SUMMARY
+          echo "- **Name:** OneSignalTest.apk" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package:** com.flet.onesignal_test" >> $GITHUB_STEP_SUMMARY
+          echo "- **Module:** test_onesignal" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download the APK from the Artifacts section above" >> $GITHUB_STEP_SUMMARY
+          echo "2. Install on your Android device" >> $GITHUB_STEP_SUMMARY
+          echo "3. Open the app" >> $GITHUB_STEP_SUMMARY
+          echo "4. Wait 10 seconds" >> $GITHUB_STEP_SUMMARY
+          echo "5. Click 'Get Player ID'" >> $GITHUB_STEP_SUMMARY
+          echo "6. Screenshot the result and check OneSignal Dashboard" >> $GITHUB_STEP_SUMMARY
